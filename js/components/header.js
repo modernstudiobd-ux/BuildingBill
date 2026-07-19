@@ -196,7 +196,7 @@ export function initHeader() {
   });
   document.getElementById('mobileMenuBackdrop').addEventListener('click', closeMobileMenu);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMobileMenu(); });
-  window.addEventListener('resize', function () { if (window.innerWidth > 640) closeMobileMenu(); });
+  window.addEventListener('resize', function () { if (window.innerWidth > 768) closeMobileMenu(); });
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();

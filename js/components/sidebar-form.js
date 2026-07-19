@@ -9,7 +9,7 @@ import { sync, renderLineItems } from '../invoice-renderer.js';
 
 /* ---------- collapsible panels (mobile only) ---------- */
 export function togglePanelCollapse(headEl) {
-  if (window.innerWidth > 640) return;
+  if (window.innerWidth > 768) return;
   headEl.closest('.panel').classList.toggle('collapsed');
 }
 

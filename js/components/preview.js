@@ -57,7 +57,10 @@ export function sendWhatsApp() {
 
   // Force isolated tab generation across all form factors. This cleanly hands off 
   // execution to the native WhatsApp client wrapper without triggering a PWA window layout crash.
-  const win = window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  // NOTE: window.open's 'noopener'/'noreferrer' features make it always return null
+  // (even when the popup succeeds), so opener isolation is done manually below instead —
+  // that keeps the true return value intact for accurate popup-blocked detection.
+  const win = window.open(whatsappUrl, '_blank');
   if (win) {
     win.opener = null;
   } else {
@@ -112,7 +115,7 @@ function preparePrintLayout() {
   // is triggered, force the Preview tab so the invoice column is guaranteed to be
   // in the DOM and visible — the print stylesheet only hides the form column, it
   // doesn't show the preview column if mobile CSS has hidden it.
-  if (window.innerWidth <= 640 && typeof window.switchMobileView === 'function') window.switchMobileView('preview');
+  if (window.innerWidth <= 768 && typeof window.switchMobileView === 'function') window.switchMobileView('preview');
   closeMobileMenu();
   document.body.classList.add('printing');
   saveToHistory();
