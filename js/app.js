@@ -14,11 +14,13 @@ import { initHeader } from './components/header.js';
 import './components/mobile-tabs.js';
 import './components/bottom-action-bar.js';
 import { initPreview } from './components/preview.js';
+import { initPdfInvoice } from './pdf-invoice.js';
 import { sync } from './invoice-renderer.js';
 
 initHeader();
 initSidebarForm();
 initPreview();
+initPdfInvoice();
 
 /* ---------- startup sequence (unchanged from the original single-file version) ---------- */
 renderLineItems();

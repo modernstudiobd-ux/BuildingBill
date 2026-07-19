@@ -6,6 +6,7 @@
 import { state, val, showToast } from '../state.js';
 import { saveToHistory } from './history-modal.js';
 import { closeMobileMenu } from './header.js';
+import { generateInvoicePDF } from '../pdf-invoice.js';
 
 /* ---------- tabs ---------- */
 export function switchTab(name) {
@@ -147,11 +148,27 @@ export function printInvoice() {
   showToast('Opening print dialog', 'Select your printer and print the invoice.');
 }
 
-export function downloadPDF() {
-  if (!canPrint()) return;
-  preparePrintLayout();
-  window.print();
-  showToast('Opening print dialog', 'Choose "Save as PDF" as the destination. Tick "Background graphics" (or "Print backgrounds") and untick "Headers and footers" if your browser shows those options.');
+export async function downloadPDF() {
+  closeMobileMenu();
+  saveToHistory();
+  try {
+    const pdfBytes = await generateInvoicePDF();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (val('invNumber') || 'invoice') + '.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    showToast('PDF downloaded', a.download + ' saved — text stays selectable and it\u2019s ready to print.');
+  } catch (e) {
+    console.error('PDF generation failed, falling back to Print > Save as PDF:', e);
+    if (!canPrint()) return;
+    preparePrintLayout();
+    window.print();
+    showToast('Opening print dialog instead', 'Choose "Save as PDF" as the destination. (The one-tap PDF download hit a snag — see console for details.)');
+  }
 }
 
 /* ---------- wire up listeners that aren't inline onclick/onchange in the HTML ---------- */

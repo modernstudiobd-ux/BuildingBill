@@ -14,6 +14,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BuildingBill">
 <script src="lib/qrcode.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
+<script src="lib/fontkit.umd.min.js"></script>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body class="mobile-tab-form">
@@ -143,7 +145,16 @@
           </select>
         </div>
       </div>
-      <div class="field" id="customCurrencyField" style="display:none;max-width:13.75rem;"><label for="invCurrencyCustom">Currency symbol</label><input type="text" id="invCurrencyCustom" placeholder="e.g. R$" oninput="sync()"></div>
+      <div class="field-row">
+        <div class="field" id="customCurrencyField" style="display:none;"><label for="invCurrencyCustom">Currency symbol</label><input type="text" id="invCurrencyCustom" placeholder="e.g. R$" oninput="sync()"></div>
+        <div class="field"><label for="pdfPageSize">PDF page size</label>
+          <select id="pdfPageSize" onchange="setPageSize(this.value)">
+            <option value="a4">A4 (210 × 297 mm) — most countries</option>
+            <option value="letter">US Letter (8.5 × 11 in)</option>
+            <option value="legal">US Legal (8.5 × 14 in)</option>
+          </select>
+        </div>
+      </div>
     </div>
 
     <div class="panel collapsed">
