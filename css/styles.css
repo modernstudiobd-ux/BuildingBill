@@ -219,20 +219,28 @@ a{color:inherit;}
   @page{ size: portrait; margin:0; }
   *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
   html,body{height:auto !important;background:#fff !important;}
-  body.printing .invoice-paper{break-inside:avoid;page-break-inside:avoid;}
-  body.printing > .topbar,
-  body.printing .wrap > div:first-child,
-  body.printing .preview-tabs,
-  body.printing #pane-text,
-  body.printing .action-row,
-  body.printing .mobile-share-bar,
-  body.printing .mobile-view-tabs,
-  body.printing .mobile-form-bar,
-  body.printing .mobile-menu-backdrop,
-  body.printing .toast-stack{display:none !important;}
-  body.printing .wrap{display:block !important;max-width:none !important;padding:0 !important;margin:0 !important;grid-template-columns:none !important;}
-  body.printing .preview-col{position:static !important;}
-  body.printing .invoice-paper{box-shadow:none !important;border:none !important;border-radius:0 !important;margin:0 !important;padding:12mm;}
+
+  /* Everything below is gated purely by @media print, not by a JS-toggled class —
+     the browser already scopes this to "actually printing right now", so there's
+     nothing for app code to set up or tear down beforehand. Whichever tab/mobile
+     view was on screen, printing always forces the invoice preview to be the
+     thing shown: no pre-print DOM writes, no timing to get wrong. */
+  .topbar,
+  .mobile-view-tabs,
+  .form-col,
+  .preview-tabs,
+  #pane-text,
+  .action-row,
+  .mobile-share-bar,
+  .mobile-form-bar,
+  .hamburger-btn,
+  .mobile-menu-backdrop,
+  .toast-stack{display:none !important;}
+
+  .wrap{display:block !important;max-width:none !important;padding:0 !important;margin:0 !important;grid-template-columns:none !important;}
+  .preview-col{display:block !important;position:static !important;}
+  #pane-paper{display:block !important;}
+  .invoice-paper{box-shadow:none !important;border:none !important;border-radius:0 !important;margin:0 !important;padding:12mm;break-inside:avoid;page-break-inside:avoid;}
 }
 .mobile-share-bar{display:none !important;} /* superseded by the contextual fixed action bars below */
 

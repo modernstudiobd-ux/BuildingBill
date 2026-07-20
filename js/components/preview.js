@@ -102,65 +102,39 @@ export function downloadTXT() {
   showToast('Downloaded', a.download + ' saved.');
 }
 
-/* ---------- print / PDF ---------- */
-// Printing the live app page directly (window.print()) turned out to be fundamentally
-// unreliable: Chrome and Firefox each apply their print pipeline to a dynamic single-page
-// app differently, virtual printers like Microsoft Print to PDF interact with it
-// differently again, and no combination of timing/CSS fixes made it consistent across all
-// three at once. So Print and Download PDF now both go through the same PDF file
-// generator. A finished PDF has no live layout to mistime and no page state that can get
-// stuck between attempts — it's just a document, which every browser prints the same way.
-function canPrint() {
-  // A handful of in-app webviews (e.g. opening the site from inside the
-  // Facebook/Instagram/WhatsApp/TikTok app, or some older embedded browsers)
-  // block pop-ups/new tabs entirely. Detect that and tell the person to switch
-  // browsers instead of silently doing nothing.
-  if (typeof window.open !== 'function') {
-    showToast('Printing not available here', 'Open this page in Chrome, Safari, Firefox or Edge (not an in-app browser) to print or save as PDF.');
-    return false;
-  }
-  return true;
-}
-
-async function openInvoicePDF() {
-  const pdfBytes = await generateInvoicePDF();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  return URL.createObjectURL(blob);
+/* ---------- print ---------- */
+// Printing now goes straight through window.print(). Which content shows is decided
+// entirely by the @media print rules in styles.css (they force the invoice preview
+// visible regardless of which tab/mobile view is on screen) — so there is no DOM to
+// mutate here, no .printing class to add/remove, and nothing to revert afterwards.
+// The only real risk left is Chrome grabbing the page before a web font or an <img>
+// (logo/QR) has actually finished loading, so that's the only thing we wait for.
+function waitForPreviewAssets() {
+  const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready.catch(() => {}) : Promise.resolve();
+  const container = document.getElementById('pane-paper');
+  const imgs = container ? Array.from(container.querySelectorAll('img')).filter((img) => img.src) : [];
+  const imagesReady = imgs.length
+    ? Promise.all(imgs.map((img) => (img.decode ? img.decode().catch(() => {}) : (img.complete ? Promise.resolve() : new Promise((res) => { img.onload = img.onerror = res; })))))
+    : Promise.resolve();
+  // A stuck/broken image or a font that never resolves shouldn't be able to hang the
+  // Print button forever — cap the wait, print with whatever's ready by then.
+  const timeout = new Promise((res) => setTimeout(res, 1200));
+  return Promise.race([Promise.all([fontsReady, imagesReady]), timeout]);
 }
 
 export async function printInvoice() {
-  if (!canPrint()) return;
-  // Open the tab synchronously, in the same tick as the tap/click, so mobile
-  // browsers don't treat it as an unrequested pop-up. It's filled in below once
-  // the PDF is ready (that part has to be async).
-  const printWin = window.open('', '_blank');
-  closeMobileMenu();
-  saveToHistory();
-  try {
-    const url = await openInvoicePDF();
-    if (printWin) {
-      printWin.location.href = url;
-      showToast('Invoice opened in a new tab', 'Use the Print icon in the PDF viewer that just opened. You can print it as many times as you like — it\u2019s a finished file, not a live page, so it can\u2019t get stuck or come out blank.');
-    } else {
-      // Pop-up blocked — fall back to a normal download so the person still gets the file.
-      const a = document.createElement('a');
-      a.href = url; a.download = (val('invNumber') || 'invoice') + '.pdf';
-      document.body.appendChild(a); a.click(); a.remove();
-      showToast('Pop-up blocked — downloaded instead', 'Open the PDF, then use its own Print button.');
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (e) {
-    console.error('PDF generation failed:', e);
-    if (printWin) printWin.close();
-    showToast('Could not open the invoice', 'Something went wrong generating the PDF — see the browser console for details, or try Download PDF instead.');
-  }
+  await waitForPreviewAssets();
+  window.print();
 }
 
+/* ---------- download as PDF (unchanged — still the real pdf-lib file generator) ---------- */
 export async function downloadPDF() {
   closeMobileMenu();
   saveToHistory();
   try {
-    const url = await openInvoicePDF();
+    const pdfBytes = await generateInvoicePDF();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = (val('invNumber') || 'invoice') + '.pdf';
