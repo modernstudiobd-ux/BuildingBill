@@ -103,88 +103,80 @@ export function downloadTXT() {
 }
 
 /* ---------- print / PDF ---------- */
-// Chrome has a well-known bug where calling window.print() in the very same tick as a
-// DOM/class change can print a blank page — it hasn't finished repainting the new print
-// layout yet. Waiting one real paint cycle (two nested requestAnimationFrame calls) before
-// printing fixes that, and still fires close enough to the original tap/click for mobile
-// Safari/Chrome to treat it as part of the same user action (so the print dialog still opens
-// there too).
-function waitForPaint() {
-  return new Promise(resolve => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
-}
-async function preparePrintLayout() {
-  // Self-heal: if a previous print attempt left the page stuck in "printing" mode (this can
-  // happen with virtual PDF printers like Microsoft Print to PDF, which don't always fire the
-  // browser's 'afterprint' event reliably), clear it before starting a new attempt instead of
-  // stacking on top of broken state.
-  document.body.classList.remove('printing');
-  switchTab('paper');
-  // Safety net: if the user is still on the mobile "Form" tab when Print/Download
-  // is triggered, force the Preview tab so the invoice column is guaranteed to be
-  // in the DOM and visible — the print stylesheet only hides the form column, it
-  // doesn't show the preview column if mobile CSS has hidden it.
-  if (window.innerWidth <= 768 && typeof window.switchMobileView === 'function') window.switchMobileView('preview');
-  closeMobileMenu();
-  document.body.classList.add('printing');
-  saveToHistory();
-  await waitForPaint();
-}
-
-function endPrintingState() {
-  document.body.classList.remove('printing');
-}
-
+// Printing the live app page directly (window.print()) turned out to be fundamentally
+// unreliable: Chrome and Firefox each apply their print pipeline to a dynamic single-page
+// app differently, virtual printers like Microsoft Print to PDF interact with it
+// differently again, and no combination of timing/CSS fixes made it consistent across all
+// three at once. So Print and Download PDF now both go through the same PDF file
+// generator. A finished PDF has no live layout to mistime and no page state that can get
+// stuck between attempts — it's just a document, which every browser prints the same way.
 function canPrint() {
   // A handful of in-app webviews (e.g. opening the site from inside the
   // Facebook/Instagram/WhatsApp/TikTok app, or some older embedded browsers)
-  // strip window.print entirely — there is no print/PDF UI to fall back to in
-  // those cases, since it's a native browser feature, not something a website
-  // can build itself. Detect that and tell the person to switch browsers
-  // instead of silently doing nothing.
-  if (typeof window.print !== 'function') {
+  // block pop-ups/new tabs entirely. Detect that and tell the person to switch
+  // browsers instead of silently doing nothing.
+  if (typeof window.open !== 'function') {
     showToast('Printing not available here', 'Open this page in Chrome, Safari, Firefox or Edge (not an in-app browser) to print or save as PDF.');
     return false;
   }
   return true;
 }
 
+async function openInvoicePDF() {
+  const pdfBytes = await generateInvoicePDF();
+  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  return URL.createObjectURL(blob);
+}
+
 export async function printInvoice() {
   if (!canPrint()) return;
-  await preparePrintLayout();
-  window.print();
-  showToast('Opening print dialog', 'Select your printer and print the invoice.');
-  setTimeout(endPrintingState, 3000); // safety net in case 'afterprint' doesn't fire
+  // Open the tab synchronously, in the same tick as the tap/click, so mobile
+  // browsers don't treat it as an unrequested pop-up. It's filled in below once
+  // the PDF is ready (that part has to be async).
+  const printWin = window.open('', '_blank');
+  closeMobileMenu();
+  saveToHistory();
+  try {
+    const url = await openInvoicePDF();
+    if (printWin) {
+      printWin.location.href = url;
+      showToast('Invoice opened in a new tab', 'Use the Print icon in the PDF viewer that just opened. You can print it as many times as you like — it\u2019s a finished file, not a live page, so it can\u2019t get stuck or come out blank.');
+    } else {
+      // Pop-up blocked — fall back to a normal download so the person still gets the file.
+      const a = document.createElement('a');
+      a.href = url; a.download = (val('invNumber') || 'invoice') + '.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      showToast('Pop-up blocked — downloaded instead', 'Open the PDF, then use its own Print button.');
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    console.error('PDF generation failed:', e);
+    if (printWin) printWin.close();
+    showToast('Could not open the invoice', 'Something went wrong generating the PDF — see the browser console for details, or try Download PDF instead.');
+  }
 }
 
 export async function downloadPDF() {
   closeMobileMenu();
   saveToHistory();
   try {
-    const pdfBytes = await generateInvoicePDF();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = await openInvoicePDF();
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    a.href = url;
     a.download = (val('invNumber') || 'invoice') + '.pdf';
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
     showToast('PDF downloaded', a.download + ' saved — text stays selectable and it\u2019s ready to print.');
   } catch (e) {
-    console.error('PDF generation failed, falling back to Print > Save as PDF:', e);
-    if (!canPrint()) return;
-    await preparePrintLayout();
-    window.print();
-    showToast('Opening print dialog instead', 'Choose "Save as PDF" as the destination. (The one-tap PDF download hit a snag — see console for details.)');
-    setTimeout(endPrintingState, 3000);
+    console.error('PDF generation failed:', e);
+    showToast('Could not generate the PDF', 'Something went wrong — see the browser console for details, or try again.');
   }
 }
 
 /* ---------- wire up listeners that aren't inline onclick/onchange in the HTML ---------- */
 export function initPreview() {
-  window.addEventListener('afterprint', endPrintingState);
   document.getElementById('msgText').addEventListener('input', () => { state.textManuallyEdited = true; });
 }
 
