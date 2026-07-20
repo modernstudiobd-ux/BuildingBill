@@ -16,8 +16,8 @@
    window.print() "Save as PDF" flow — this file never causes a hard failure
    of the Download PDF button.
    ========================================================================== */
-import { state, val, formatDate } from './state.js';
-import { computeTotals } from './invoice-renderer.js';
+import { state, val, formatDate, fmt } from './state.js';
+import { computeTotals, generateQRDataURL } from './invoice-renderer.js';
 import { paymentSummary } from './components/sidebar-form.js';
 
 /* ---------- page sizes (in PDF points — 72pt = 1in) ---------- */
@@ -67,6 +67,9 @@ function buildInvoiceData() {
     note: val('fNote'),
     pay: paymentSummary(),
     logoDataUrl: state.logoDataUrl,
+    walletQRDataUrl: state.walletQRDataUrl,
+    showQR: document.getElementById('showQR').checked,
+    paymentMethod: document.getElementById('paymentMethod').value,
   };
 }
 
@@ -105,6 +108,21 @@ function ensureSpace(ctx, needed) {
   }
 }
 
+/* Keeps a line of text on ONE line, never truncated: shrinks the font size
+   down (to a sane floor) until it fits the available width. Used for the
+   property address/meta line and the "Billed to" line, which must never
+   wrap or show "…" per the no-line-break requirement. */
+function textFit(ctx, str, x, y, maxWidth, opts = {}) {
+  const { font = ctx.font, size = 9.5, minSize = 6, color = [0.106, 0.141, 0.188] } = opts;
+  const s = str == null ? '' : String(str);
+  if (!s) return;
+  let useSize = size;
+  if (maxWidth) {
+    while (useSize > minSize && font.widthOfTextAtSize(s, useSize) > maxWidth) useSize -= 0.25;
+  }
+  ctx.page.drawText(s, { x, y, size: useSize, font, color: ctx.rgb(color[0], color[1], color[2]) });
+}
+
 function text(ctx, str, x, y, opts = {}) {
   const { font = ctx.font, size = 9.5, color = [0.106, 0.141, 0.188], maxWidth } = opts;
   let s = str == null ? '' : String(str);
@@ -121,25 +139,31 @@ async function drawHeader(ctx, data) {
   const left = MARGIN;
   const rightX = ctx.pageW - MARGIN;
 
-  const logoW = await drawLogo(ctx, data, left, y + 2);
-  const textX = left + logoW;
-  text(ctx, data.propertyName, textX, y - 8, { font: ctx.boldFont, size: 12.5, maxWidth: (ctx.pageW - MARGIN) - textX - 130 });
+  const logoBox = await drawLogo(ctx, data, left, y + 2);
+  const textX = left + logoBox.width;
+  const rightColW = 150; // reserved width for doctype/invoice-number/status column so left text never runs into it
+  text(ctx, data.propertyName, textX, y - 8, { font: ctx.boldFont, size: 12.5, maxWidth: (ctx.pageW - MARGIN) - textX - rightColW });
   const metaParts = [data.propertyAddress];
   if (data.senderType) metaParts.push(data.mgmtCompany, data.mgmtEmail, data.mgmtPhone);
   const meta = metaParts.filter(Boolean).join('  ·  ');
-  if (meta) text(ctx, meta, textX, y - 22, { size: 8, color: [0.541, 0.576, 0.651], maxWidth: (ctx.pageW - MARGIN) - textX - 130 });
+  if (meta) textFit(ctx, meta, textX, y - 22, (ctx.pageW - MARGIN) - textX - rightColW, { size: 8, minSize: 5.5, color: [0.541, 0.576, 0.651] });
 
-  // right-aligned doctype / invoice number / status badge
+  // right-aligned doctype / invoice number / status badge — each on its own
+  // clearly separated line so nothing crowds into the next element.
   const docLabel = data.docType;
   textSpaced(ctx, docLabel, 0, y, { font: ctx.boldFont, size: 8, color: [0.541, 0.576, 0.651], gap: 0.8, align: 'right', rightX });
+  let metaY = y - 17;
   if (data.invNumber) {
     const numW = ctx.monoBoldFont.widthOfTextAtSize(data.invNumber, 9.5);
-    text(ctx, data.invNumber, rightX - numW, y - 15, { font: ctx.monoBoldFont, size: 9.5, color: [0.106, 0.141, 0.188] });
+    text(ctx, data.invNumber, rightX - numW, metaY, { font: ctx.monoBoldFont, size: 9.5, color: [0.106, 0.141, 0.188] });
+    metaY -= 18; // clear gap before the badge — this is what was crowding "DUE" against the invoice number
   }
   const pillDims = measureStatusPill(ctx, data.status);
-  drawStatusPill(ctx, data.status, rightX - pillDims.w, y - 20, pillDims);
+  drawStatusPill(ctx, data.status, rightX - pillDims.w, metaY, pillDims);
 
-  ctx.y = y - Math.max(logoW ? 42 : 34, 42) - 14;
+  const logoBottom = y - logoBox.height - 2;
+  const rightBottom = metaY - pillDims.h;
+  ctx.y = Math.min(logoBottom, rightBottom) - 16;
 }
 
 function drawParties(ctx, data) {
@@ -150,7 +174,7 @@ function drawParties(ctx, data) {
   if (showBillTo) {
     textSpaced(ctx, 'Billed to', MARGIN, y, { size: 6.2, gap: 2.2 });
     const billLine = [data.resident, data.unit ? `Unit ${data.unit}` : '', data.relation].filter(Boolean).join('  ·  ');
-    text(ctx, billLine, MARGIN, y - 14, { size: 9.5 });
+    textFit(ctx, billLine, MARGIN, y - 14, ctx.pageW / 2 - MARGIN - 10, { size: 9.5, minSize: 7 });
   }
 
   const rLabel = (s, yy) => textSpaced(ctx, s, 0, yy, { size: 6.2, gap: 2.2, align: 'right', rightX });
@@ -220,16 +244,42 @@ function drawTotals(ctx, t, sym, unicodeOK) {
   }
 }
 
-function drawFooter(ctx, data) {
+function buildQRPayload(data) {
+  if (!data.showQR) return null;
+  if (data.paymentMethod === 'wallet' && data.walletQRDataUrl) return data.walletQRDataUrl;
+  if (!data.pay) return null;
+  const invNo = data.invNumber || 'invoice';
+  const qrText = `Payment for ${invNo}\n${data.pay.label}\n${data.pay.lines.join('\n')}\nAmount: ${fmt(data.totals.total)}`;
+  return generateQRDataURL(qrText, 140);
+}
+
+async function drawFooter(ctx, data) {
+  const QR_SIZE = 42, GAP = 14; // 3.5rem box, matching .paper-qr
+  let qrImg = null;
+  const qrDataUrl = buildQRPayload(data);
+  if (qrDataUrl) {
+    try { qrImg = await ctx.pdfDoc.embedPng(dataUrlToBytes(qrDataUrl)); } catch (e) { /* bad data URL — skip the QR rather than fail the whole PDF */ }
+  }
+  if (!data.note && !data.pay && !qrImg) return;
+
+  ensureSpace(ctx, QR_SIZE + 24);
+  ctx.y -= 4;
+  ctx.page.drawLine({
+    start: { x: MARGIN, y: ctx.y }, end: { x: ctx.pageW - MARGIN, y: ctx.y },
+    thickness: 0.75, color: ctx.rgb(0.906, 0.922, 0.945), dashArray: [2, 2],
+  });
+  ctx.y -= 16;
+
+  const topY = ctx.y;
+  const rightReserve = qrImg ? QR_SIZE + GAP : 0;
+  const contentW = ctx.pageW - MARGIN * 2 - rightReserve;
+
   if (data.note) {
-    ensureSpace(ctx, LINE_H * 3);
-    ctx.y -= 10;
     const words = data.note.split(/\s+/);
     let line = '';
-    const maxW = (ctx.pageW - MARGIN * 2) * 0.6;
     words.forEach((w) => {
       const trial = line ? line + ' ' + w : w;
-      if (ctx.font.widthOfTextAtSize(trial, 8.5) > maxW) {
+      if (ctx.font.widthOfTextAtSize(trial, 8.5) > contentW) {
         ensureSpace(ctx, LINE_H);
         text(ctx, line, MARGIN, ctx.y, { size: 8.5, color: [0.36, 0.42, 0.51] });
         ctx.y -= LINE_H;
@@ -239,7 +289,6 @@ function drawFooter(ctx, data) {
     if (line) { ensureSpace(ctx, LINE_H); text(ctx, line, MARGIN, ctx.y, { size: 8.5, color: [0.36, 0.42, 0.51] }); ctx.y -= LINE_H; }
   }
   if (data.pay) {
-    ensureSpace(ctx, LINE_H * (2 + data.pay.lines.length));
     ctx.y -= 8;
     text(ctx, `Pay via ${data.pay.label}`, MARGIN, ctx.y, { font: ctx.boldFont, size: 8.5 });
     ctx.y -= LINE_H;
@@ -248,6 +297,13 @@ function drawFooter(ctx, data) {
       text(ctx, l, MARGIN, ctx.y, { size: 8.5, color: [0.36, 0.42, 0.51] });
       ctx.y -= LINE_H;
     });
+  }
+
+  if (qrImg) {
+    const qrX = ctx.pageW - MARGIN - QR_SIZE;
+    const qrY = topY - QR_SIZE;
+    ctx.page.drawRectangle({ x: qrX, y: qrY, width: QR_SIZE, height: QR_SIZE, color: ctx.rgb(1, 1, 1), borderColor: ctx.rgb(0.906, 0.922, 0.945), borderWidth: 0.75 });
+    ctx.page.drawImage(qrImg, { x: qrX + 2, y: qrY + 2, width: QR_SIZE - 4, height: QR_SIZE - 4 });
   }
 }
 
@@ -350,20 +406,22 @@ function drawGradientBar(ctx, colorA, colorB) {
   }
 }
 
-/* Draws the uploaded logo (if any) scaled into a fixed box, or the same
-   gradient placeholder square the preview shows when there's no logo yet.
-   Returns the box width so the caller knows where brand text should start. */
+/* Draws the uploaded logo (if any) scaled into the SAME box the preview uses
+   (.paper-logo: max-height 3.25rem/39pt, max-width 11.25rem/135pt, aspect
+   ratio preserved — that's the "logo rule"), or the same gradient placeholder
+   square (.paper-logo-fallback: 2.75rem/33pt) shown when there's no logo yet.
+   Returns the box's actual {width, height} so the header can position the
+   brand text next to it and reserve enough vertical room without overlap. */
+const LOGO_MAX_W = 135, LOGO_MAX_H = 39, LOGO_FALLBACK = 33;
 async function drawLogo(ctx, data, x, topY) {
-  const boxH = 33; // 2.75rem fallback-square height, also used as the max height for real logos
   if (data.logoDataUrl) {
     try {
       const bytes = dataUrlToBytes(data.logoDataUrl);
       const png = await ctx.pdfDoc.embedPng(bytes);
-      const maxW = 100, maxH = boxH;
-      const scale = Math.min(maxW / png.width, maxH / png.height, 1) || Math.min(maxW / png.width, maxH / png.height);
+      const scale = Math.min(LOGO_MAX_W / png.width, LOGO_MAX_H / png.height, 1);
       const w = png.width * scale, h = png.height * scale;
-      ctx.page.drawImage(png, { x, y: topY - boxH + (boxH - h) / 2, width: w, height: h });
-      return w + 12;
+      ctx.page.drawImage(png, { x, y: topY - LOGO_MAX_H + (LOGO_MAX_H - h) / 2, width: w, height: h });
+      return { width: w + 12, height: LOGO_MAX_H };
     } catch (e) { /* corrupt/unsupported logo data — fall through to the placeholder */ }
   }
   const steps = 10;
@@ -371,9 +429,9 @@ async function drawLogo(ctx, data, x, topY) {
     const t = i / (steps - 1);
     const c1 = ctx.primaryLightColor, c2 = ctx.primaryColor;
     const r = c1[0] + (c2[0] - c1[0]) * t, g = c1[1] + (c2[1] - c1[1]) * t, b = c1[2] + (c2[2] - c1[2]) * t;
-    ctx.page.drawRectangle({ x: x + (i * boxH) / steps, y: topY - boxH, width: boxH / steps + 0.5, height: boxH, color: ctx.rgb(r, g, b) });
+    ctx.page.drawRectangle({ x: x + (i * LOGO_FALLBACK) / steps, y: topY - LOGO_FALLBACK, width: LOGO_FALLBACK / steps + 0.5, height: LOGO_FALLBACK, color: ctx.rgb(r, g, b) });
   }
-  return boxH + 12;
+  return { width: LOGO_FALLBACK + 12, height: LOGO_FALLBACK };
 }
 
 function measureStatusPill(ctx, status) {
@@ -428,7 +486,7 @@ export async function generateInvoicePDF() {
   });
   ensureSpace(ctx, 90); // keep the totals block from being orphaned alone at the bottom of a page
   drawTotals(ctx, data.totals, sym, ctx.unicodeOK);
-  drawFooter(ctx, data);
+  await drawFooter(ctx, data);
   drawPageNumbers(ctx);
 
   return pdfDoc.save();
