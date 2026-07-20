@@ -184,12 +184,21 @@ async function drawHeader(ctx, data) {
   const rightColW = 150; // reserved width for doctype/invoice-number/status column so left text never runs into it
   const leftColW = (ctx.pageW - MARGIN) - textX - rightColW;
   text(ctx, data.propertyName, textX, y - 8, { font: ctx.boldFont, size: 12.5, maxWidth: leftColW });
-  const metaParts = [data.propertyAddress];
-  if (data.senderType) metaParts.push(data.mgmtCompany, data.mgmtEmail, data.mgmtPhone);
-  const meta = metaParts.filter(Boolean).join('  ·  ');
-  const metaBottomY = meta
-    ? drawWrapped(ctx, meta, textX, y - 22, leftColW, { size: 8, lineHeight: 10, maxLines: 3, color: [0.541, 0.576, 0.651] })
-    : y - 22;
+
+  // Address gets its own wrapped block (breaks onto another line if it's too
+  // long), and "Billed by" (company/manager/landlord + email + phone) is a
+  // separate block drawn underneath it, rather than one string merging both.
+  const metaOpts = { size: 8, lineHeight: 10, maxLines: 2, color: [0.541, 0.576, 0.651] };
+  let cursorY = y - 22;
+  if (data.propertyAddress) {
+    cursorY = drawWrapped(ctx, data.propertyAddress, textX, cursorY, leftColW, metaOpts);
+    cursorY -= 10;
+  }
+  if (data.senderType) {
+    const billedBy = [data.mgmtCompany, data.mgmtEmail, data.mgmtPhone].filter(Boolean).join('  ·  ');
+    if (billedBy) cursorY = drawWrapped(ctx, billedBy, textX, cursorY, leftColW, metaOpts);
+  }
+  const metaBottomY = cursorY;
 
   // right-aligned doctype / invoice number / status badge — each on its own
   // clearly separated line so nothing crowds into the next element.
@@ -325,18 +334,22 @@ async function drawFooter(ctx, data) {
   const contentW = ctx.pageW - MARGIN * 2 - rightReserve;
 
   if (data.note) {
-    const words = data.note.split(/\s+/);
-    let line = '';
-    words.forEach((w) => {
-      const trial = line ? line + ' ' + w : w;
-      if (ctx.font.widthOfTextAtSize(trial, 8.5) > contentW) {
-        ensureSpace(ctx, LINE_H);
-        text(ctx, line, MARGIN, ctx.y, { size: 8.5, color: [0.36, 0.42, 0.51] });
-        ctx.y -= LINE_H;
-        line = w;
-      } else line = trial;
+    const paragraphs = data.note.split(/\r\n|\r|\n/);
+    paragraphs.forEach((para) => {
+      if (!para.trim()) { ensureSpace(ctx, LINE_H); ctx.y -= LINE_H; return; } // blank line the person typed — preserve it, like the preview does
+      const words = para.split(/\s+/).filter(Boolean);
+      let line = '';
+      words.forEach((w) => {
+        const trial = line ? line + ' ' + w : w;
+        if (line && ctx.font.widthOfTextAtSize(trial, 8.5) > contentW) {
+          ensureSpace(ctx, LINE_H);
+          text(ctx, line, MARGIN, ctx.y, { size: 8.5, color: [0.36, 0.42, 0.51] });
+          ctx.y -= LINE_H;
+          line = w;
+        } else line = trial;
+      });
+      if (line) { ensureSpace(ctx, LINE_H); text(ctx, line, MARGIN, ctx.y, { size: 8.5, color: [0.36, 0.42, 0.51] }); ctx.y -= LINE_H; }
     });
-    if (line) { ensureSpace(ctx, LINE_H); text(ctx, line, MARGIN, ctx.y, { size: 8.5, color: [0.36, 0.42, 0.51] }); ctx.y -= LINE_H; }
   }
   if (data.pay) {
     ctx.y -= 8;
