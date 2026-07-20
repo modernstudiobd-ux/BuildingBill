@@ -216,9 +216,10 @@ a{color:inherit;}
      the visual margin back as padding on the paper itself instead. Some browsers still
      show a "Headers and footers" checkbox in the print dialog — uncheck it there for a
      guaranteed clean result. */
-  @page{ margin:0; }
+  @page{ size: portrait; margin:0; }
   *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
   html,body{height:auto !important;background:#fff !important;}
+  body.printing .invoice-paper{break-inside:avoid;page-break-inside:avoid;}
   body.printing > .topbar,
   body.printing .wrap > div:first-child,
   body.printing .preview-tabs,
