@@ -241,6 +241,8 @@ export function buildMessageText() {
   const due = formatDate(val('invDue')) || '—';
 
   let lines = '';
+  const greeting = val('msgGreeting');
+  if (greeting) lines += `${greeting}\n\n`;
   lines += `Billing Period: ${month}\n`;
   lines += `Due Date: *${due}*\n\n`;
   lines += `*Charges:*\n`;

@@ -16,7 +16,7 @@ export function buildSnapshot() {
     invTitle: val('invTitle'), invNumber: val('invNumber'), invMonth: val('invMonth'), invIssue: val('invIssue'), invDue: val('invDue'), invCurrency: document.getElementById('invCurrency').value,
     invCurrencyCustom: val('invCurrencyCustom'), invStatus: document.getElementById('invStatus').value,
     invDiscount: val('invDiscount'), discountMode: state.discountMode, invTax: val('invTax'), invPrevDue: val('invPrevDue'), invPaid: val('invPaid'),
-    fNote: val('fNote'), paymentMethod: document.getElementById('paymentMethod').value, showQR: document.getElementById('showQR').checked,
+    fNote: val('fNote'), msgGreeting: val('msgGreeting'), paymentMethod: document.getElementById('paymentMethod').value, showQR: document.getElementById('showQR').checked,
     payFields: (() => { const o = {}; document.querySelectorAll('#paymentFields input:not([type="file"]), #paymentFields textarea').forEach(el => { if (el.id) o[el.id] = el.value; }); return o; })(),
     lineItems: JSON.parse(JSON.stringify(state.lineItems)), logoDataUrl: state.logoDataUrl, walletQRDataUrl: state.walletQRDataUrl
   };

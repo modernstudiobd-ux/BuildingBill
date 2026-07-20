@@ -136,7 +136,7 @@ export function validateDates() {
 export function confirmReset() {
   if (confirm('Start a new invoice? This clears all current fields (your property and logo info are kept).')) {
     state.lineItems = [{ cat: 'Rent', amt: 0 }];
-    ['fUnit', 'fResident', 'fResidentEmail', 'fLeaseRef', 'invTitle', 'invNumber', 'invMonth', 'invIssue', 'invDue', 'fNote', 'waNumber'].forEach(id => {
+    ['fUnit', 'fResident', 'fResidentEmail', 'fLeaseRef', 'invTitle', 'invNumber', 'invMonth', 'invIssue', 'invDue', 'fNote', 'msgGreeting', 'waNumber'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     document.getElementById('invPrevDue').value = 0;

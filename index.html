@@ -279,6 +279,11 @@
     </div>
 
     <div class="preview-pane" id="pane-text">
+      <div class="field greeting-field">
+        <label for="msgGreeting">Custom greeting (optional)</label>
+        <input type="text" id="msgGreeting" placeholder="e.g. Hi Sarah, here's your invoice for June!" oninput="sync()">
+        <div class="field-hint">Appears as the first line of the message below.</div>
+      </div>
       <div class="msg-frame">
         <textarea id="msgText" spellcheck="false" aria-label="Invoice message text"></textarea>
       </div>

@@ -180,6 +180,7 @@ a{color:inherit;}
 
 /* MESSAGE TEXT PANE */
 .msg-frame{background:var(--panel2);border:1px solid var(--line);border-radius:0.625rem;padding:0.875rem;}
+.greeting-field{margin-bottom:0.75rem;}
 #msgText{width:100%;min-height:21.25rem;background:transparent;border:none;outline:none;resize:vertical;color:var(--text);font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:0.7812rem;line-height:1.65;white-space:pre-wrap;}
 .msg-hint{font-size:0.6562rem;color:var(--text-faint);margin-top:0.5rem;line-height:1.5;}
 
