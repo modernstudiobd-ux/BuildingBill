@@ -317,7 +317,10 @@
   <div class="modal-card">
     <div class="modal-head">
       <h3>Invoice history</h3>
-      <button class="modal-close" onclick="closeHistoryModal()" aria-label="Close">✕</button>
+      <div class="modal-head-actions">
+        <button class="new-invoice-btn danger" id="clearHistoryBtn" onclick="clearAllHistory()" title="Delete every saved invoice">Clear all</button>
+        <button class="modal-close" onclick="closeHistoryModal()" aria-label="Close">✕</button>
+      </div>
     </div>
     <div class="modal-body" id="historyList"></div>
   </div>

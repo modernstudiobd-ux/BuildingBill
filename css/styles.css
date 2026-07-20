@@ -72,6 +72,8 @@ a{color:inherit;}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:0.0625rem solid var(--line);}
 .modal-head h3{font-size:0.9375rem;font-weight:700;}
 .modal-close{cursor:pointer;color:var(--text-faint);font-size:1.25rem;line-height:1;background:none;border:none;padding:0.25rem;}
+.modal-head-actions{display:flex;align-items:center;gap:0.625rem;}
+.modal-head-actions .danger[disabled]{opacity:0.45;cursor:not-allowed;}
 .modal-close:hover{color:var(--text);}
 .modal-body{padding:0.5rem 0.75rem;max-height:60vh;overflow-y:auto;}
 .history-empty{padding:1.875rem 1rem;text-align:center;color:var(--text-faint);font-size:0.8125rem;}

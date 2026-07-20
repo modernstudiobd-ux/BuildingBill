@@ -118,6 +118,8 @@ function computeSnapshotTotal(s) {
 function renderHistoryList() {
   const list = getHistory();
   const wrap = document.getElementById('historyList');
+  const clearBtn = document.getElementById('clearHistoryBtn');
+  if (clearBtn) clearBtn.disabled = list.length === 0;
   if (!list.length) {
     wrap.innerHTML = '<div class="history-empty">No saved invoices yet. An invoice is saved here automatically each time you print or download it.</div>';
     return;
@@ -166,6 +168,15 @@ export function deleteFromHistory(id) {
   setHistoryList(getHistory().filter(h => h.id !== id));
   renderHistoryList();
 }
+export function clearAllHistory() {
+  const list = getHistory();
+  if (!list.length) return;
+  const count = list.length;
+  if (!confirm(`Delete all ${count} saved invoice${count === 1 ? '' : 's'} from history? This cannot be undone.`)) return;
+  setHistoryList([]);
+  renderHistoryList();
+  showToast('History cleared', `${count} saved invoice${count === 1 ? '' : 's'} deleted.`);
+}
 /* "Duplicate" button in the header — duplicates the invoice currently on screen (not a saved one). */
 export function duplicateCurrentInvoice() {
   const snap = buildSnapshot();
@@ -180,4 +191,5 @@ window.closeHistoryModal = closeHistoryModal;
 window.loadFromHistory = loadFromHistory;
 window.duplicateFromHistory = duplicateFromHistory;
 window.deleteFromHistory = deleteFromHistory;
+window.clearAllHistory = clearAllHistory;
 window.duplicateCurrentInvoice = duplicateCurrentInvoice;

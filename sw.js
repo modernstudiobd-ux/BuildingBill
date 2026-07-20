@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'invoicer-v9';
+const CACHE_VERSION = 'invoicer-v10';
 const APP_SHELL = [
   './',
   './index.html',
