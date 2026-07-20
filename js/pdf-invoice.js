@@ -134,6 +134,46 @@ function text(ctx, str, x, y, opts = {}) {
   return s;
 }
 
+/* Greedy word-wrap: splits str into as many lines as needed to fit maxWidth,
+   capped at maxLines (extra content is folded into the last line with "…"). */
+function wrapLines(font, size, str, maxWidth, maxLines) {
+  const words = String(str == null ? '' : str).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  words.forEach((w) => {
+    const trial = line ? line + ' ' + w : w;
+    if (line && font.widthOfTextAtSize(trial, size) > maxWidth) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = trial;
+    }
+  });
+  if (line) lines.push(line);
+  if (maxLines && lines.length > maxLines) {
+    lines.length = maxLines;
+    let last = lines[maxLines - 1];
+    while (last.length > 1 && font.widthOfTextAtSize(last + '…', size) > maxWidth) last = last.slice(0, -1);
+    lines[maxLines - 1] = last + '…';
+  }
+  return lines;
+}
+
+/* Draws str wrapped across multiple lines (like the preview's normal CSS text
+   wrapping) instead of forcing everything onto one shrunken/truncated line.
+   Returns the baseline y of the last line drawn, so the caller can reserve
+   the right amount of vertical space for whatever comes next. */
+function drawWrapped(ctx, str, x, topY, maxWidth, opts = {}) {
+  const { font = ctx.font, size = 8, color = [0.541, 0.576, 0.651], lineHeight = 10, maxLines = 3 } = opts;
+  const s = str == null ? '' : String(str);
+  if (!s) return topY;
+  const lines = wrapLines(font, size, s, maxWidth, maxLines);
+  lines.forEach((line, i) => {
+    ctx.page.drawText(line, { x, y: topY - i * lineHeight, size, font, color: ctx.rgb(color[0], color[1], color[2]) });
+  });
+  return topY - (lines.length - 1) * lineHeight;
+}
+
 async function drawHeader(ctx, data) {
   const y = ctx.y;
   const left = MARGIN;
@@ -142,11 +182,14 @@ async function drawHeader(ctx, data) {
   const logoBox = await drawLogo(ctx, data, left, y + 2);
   const textX = left + logoBox.width;
   const rightColW = 150; // reserved width for doctype/invoice-number/status column so left text never runs into it
-  text(ctx, data.propertyName, textX, y - 8, { font: ctx.boldFont, size: 12.5, maxWidth: (ctx.pageW - MARGIN) - textX - rightColW });
+  const leftColW = (ctx.pageW - MARGIN) - textX - rightColW;
+  text(ctx, data.propertyName, textX, y - 8, { font: ctx.boldFont, size: 12.5, maxWidth: leftColW });
   const metaParts = [data.propertyAddress];
   if (data.senderType) metaParts.push(data.mgmtCompany, data.mgmtEmail, data.mgmtPhone);
   const meta = metaParts.filter(Boolean).join('  ·  ');
-  if (meta) textFit(ctx, meta, textX, y - 22, (ctx.pageW - MARGIN) - textX - rightColW, { size: 8, minSize: 5.5, color: [0.541, 0.576, 0.651] });
+  const metaBottomY = meta
+    ? drawWrapped(ctx, meta, textX, y - 22, leftColW, { size: 8, lineHeight: 10, maxLines: 3, color: [0.541, 0.576, 0.651] })
+    : y - 22;
 
   // right-aligned doctype / invoice number / status badge — each on its own
   // clearly separated line so nothing crowds into the next element.
@@ -163,7 +206,8 @@ async function drawHeader(ctx, data) {
 
   const logoBottom = y - logoBox.height - 2;
   const rightBottom = metaY - pillDims.h;
-  ctx.y = Math.min(logoBottom, rightBottom) - 16;
+  const leftBottom = metaBottomY - 10;
+  ctx.y = Math.min(logoBottom, rightBottom, leftBottom) - 16;
 }
 
 function drawParties(ctx, data) {
@@ -173,8 +217,14 @@ function drawParties(ctx, data) {
 
   if (showBillTo) {
     textSpaced(ctx, 'Billed to', MARGIN, y, { size: 6.2, gap: 2.2 });
-    const billLine = [data.resident, data.unit ? `Unit ${data.unit}` : '', data.relation].filter(Boolean).join('  ·  ');
-    textFit(ctx, billLine, MARGIN, y - 14, ctx.pageW / 2 - MARGIN - 10, { size: 9.5, minSize: 7 });
+    const maxW = ctx.pageW / 2 - MARGIN - 10;
+    let lineY = y - 14;
+    if (data.resident) {
+      text(ctx, data.resident, MARGIN, lineY, { size: 9.5, maxWidth: maxW });
+      lineY -= 13;
+    }
+    const unitLine = [data.unit ? `Unit ${data.unit}` : '', data.relation].filter(Boolean).join('  ·  ');
+    if (unitLine) text(ctx, unitLine, MARGIN, lineY, { size: 9.5, maxWidth: maxW });
   }
 
   const rLabel = (s, yy) => textSpaced(ctx, s, 0, yy, { size: 6.2, gap: 2.2, align: 'right', rightX });
@@ -408,11 +458,13 @@ function drawGradientBar(ctx, colorA, colorB) {
 
 /* Draws the uploaded logo (if any) scaled into the SAME box the preview uses
    (.paper-logo: max-height 3.25rem/39pt, max-width 11.25rem/135pt, aspect
-   ratio preserved — that's the "logo rule"), or the same gradient placeholder
-   square (.paper-logo-fallback: 2.75rem/33pt) shown when there's no logo yet.
-   Returns the box's actual {width, height} so the header can position the
-   brand text next to it and reserve enough vertical room without overlap. */
-const LOGO_MAX_W = 135, LOGO_MAX_H = 39, LOGO_FALLBACK = 33;
+   ratio preserved — that's the "logo rule"). If there's no logo, nothing is
+   drawn at all — this matches the live preview, which also shows no
+   placeholder box when logoDataUrl is empty (see invoice-renderer.js, where
+   #paperLogoFallback is always kept display:none). Returns the box's actual
+   {width, height} so the header can position the brand text next to it and
+   reserve enough vertical room without overlap; both are 0 when there's no logo. */
+const LOGO_MAX_W = 135, LOGO_MAX_H = 39;
 async function drawLogo(ctx, data, x, topY) {
   if (data.logoDataUrl) {
     try {
@@ -422,16 +474,9 @@ async function drawLogo(ctx, data, x, topY) {
       const w = png.width * scale, h = png.height * scale;
       ctx.page.drawImage(png, { x, y: topY - LOGO_MAX_H + (LOGO_MAX_H - h) / 2, width: w, height: h });
       return { width: w + 12, height: LOGO_MAX_H };
-    } catch (e) { /* corrupt/unsupported logo data — fall through to the placeholder */ }
+    } catch (e) { /* corrupt/unsupported logo data — fall through to "no logo" rather than fail the whole PDF */ }
   }
-  const steps = 10;
-  for (let i = 0; i < steps; i++) {
-    const t = i / (steps - 1);
-    const c1 = ctx.primaryLightColor, c2 = ctx.primaryColor;
-    const r = c1[0] + (c2[0] - c1[0]) * t, g = c1[1] + (c2[1] - c1[1]) * t, b = c1[2] + (c2[2] - c1[2]) * t;
-    ctx.page.drawRectangle({ x: x + (i * LOGO_FALLBACK) / steps, y: topY - LOGO_FALLBACK, width: LOGO_FALLBACK / steps + 0.5, height: LOGO_FALLBACK, color: ctx.rgb(r, g, b) });
-  }
-  return { width: LOGO_FALLBACK + 12, height: LOGO_FALLBACK };
+  return { width: 0, height: 0 };
 }
 
 function measureStatusPill(ctx, status) {
