@@ -91,6 +91,7 @@ function newPage(ctx) {
   ctx.page = ctx.pdfDoc.addPage([ctx.pageW, ctx.pageH]);
   ctx.pageIndex += 1;
   ctx.pages.push(ctx.page);
+  drawGradientBar(ctx, ctx.primaryColor, ctx.accentColor);
   ctx.y = ctx.pageH - MARGIN;
   if (ctx.pageIndex > 1) {
     drawContinuationHeader(ctx);
@@ -115,27 +116,51 @@ function text(ctx, str, x, y, opts = {}) {
   return s;
 }
 
-function drawHeader(ctx, data) {
-  let y = ctx.y;
+async function drawHeader(ctx, data) {
+  const y = ctx.y;
   const left = MARGIN;
-  text(ctx, data.docType, left, y, { font: ctx.boldFont, size: 20, color: ctx.primaryColor });
-  if (data.invNumber) text(ctx, data.invNumber, left, y - 16, { font: ctx.font, size: 10, color: [0.36, 0.42, 0.51] });
+  const rightX = ctx.pageW - MARGIN;
 
-  text(ctx, data.propertyName, left, y - 40, { font: ctx.boldFont, size: 12.5 });
+  const logoW = await drawLogo(ctx, data, left, y + 2);
+  const textX = left + logoW;
+  text(ctx, data.propertyName, textX, y - 8, { font: ctx.boldFont, size: 12.5, maxWidth: (ctx.pageW - MARGIN) - textX - 130 });
   const metaParts = [data.propertyAddress];
   if (data.senderType) metaParts.push(data.mgmtCompany, data.mgmtEmail, data.mgmtPhone);
   const meta = metaParts.filter(Boolean).join('  ·  ');
-  if (meta) text(ctx, meta, left, y - 55, { size: 8.5, color: [0.36, 0.42, 0.51], maxWidth: ctx.pageW - MARGIN * 2 });
+  if (meta) text(ctx, meta, textX, y - 22, { size: 8, color: [0.541, 0.576, 0.651], maxWidth: (ctx.pageW - MARGIN) - textX - 130 });
 
-  // right-aligned billing period / due date block
+  // right-aligned doctype / invoice number / status badge
+  const docLabel = data.docType;
+  textSpaced(ctx, docLabel, 0, y, { font: ctx.boldFont, size: 8, color: [0.541, 0.576, 0.651], gap: 0.8, align: 'right', rightX });
+  if (data.invNumber) {
+    const numW = ctx.monoBoldFont.widthOfTextAtSize(data.invNumber, 9.5);
+    text(ctx, data.invNumber, rightX - numW, y - 15, { font: ctx.monoBoldFont, size: 9.5, color: [0.106, 0.141, 0.188] });
+  }
+  const pillDims = measureStatusPill(ctx, data.status);
+  drawStatusPill(ctx, data.status, rightX - pillDims.w, y - 20, pillDims);
+
+  ctx.y = y - Math.max(logoW ? 42 : 34, 42) - 14;
+}
+
+function drawParties(ctx, data) {
+  const y = ctx.y;
   const rightX = ctx.pageW - MARGIN;
-  const rLabel = (s, yy) => text(ctx, s, rightX - ctx.font.widthOfTextAtSize(s, 8.5), yy, { size: 8.5, color: [0.36, 0.42, 0.51] });
-  rLabel('Billing period', y);
-  rLabel(data.month, y - 12);
-  rLabel('Due date', y - 30);
-  rLabel(data.due, y - 42);
+  const showBillTo = !!(data.resident || data.unit);
 
-  ctx.y = y - 75;
+  if (showBillTo) {
+    textSpaced(ctx, 'Billed to', MARGIN, y, { size: 6.2, gap: 2.2 });
+    const billLine = [data.resident, data.unit ? `Unit ${data.unit}` : '', data.relation].filter(Boolean).join('  ·  ');
+    text(ctx, billLine, MARGIN, y - 14, { size: 9.5 });
+  }
+
+  const rLabel = (s, yy) => textSpaced(ctx, s, 0, yy, { size: 6.2, gap: 2.2, align: 'right', rightX });
+  const rVal = (s, yy) => text(ctx, s, rightX - ctx.font.widthOfTextAtSize(s, 9), yy, { size: 9 });
+  rLabel('Billing period', y);
+  rVal(data.month, y - 14);
+  rLabel('Due date', y - 32);
+  rVal(data.due, y - 46);
+
+  ctx.y = y - 66;
 }
 
 function drawContinuationHeader(ctx) {
@@ -144,24 +169,14 @@ function drawContinuationHeader(ctx) {
   ctx.y -= 24;
 }
 
-function drawParties(ctx, data) {
-  if (!data.resident && !data.unit) return;
-  let y = ctx.y;
-  text(ctx, 'Billed to', MARGIN, y, { font: ctx.boldFont, size: 9 });
-  const billLine = [data.resident, data.unit ? `Unit ${data.unit}` : '', data.relation].filter(Boolean).join('  ·  ');
-  text(ctx, billLine, MARGIN, y - 13, { size: 9.5 });
-  ctx.y = y - 32;
-}
-
 function drawTableHeader(ctx) {
   const y = ctx.y;
   const rightX = ctx.pageW - MARGIN;
-  text(ctx, 'Description', MARGIN, y, { font: ctx.boldFont, size: 8.5, color: [0.36, 0.42, 0.51] });
-  const amtLabel = 'Amount';
-  text(ctx, amtLabel, rightX - ctx.font.widthOfTextAtSize(amtLabel, 8.5), y, { font: ctx.boldFont, size: 8.5, color: [0.36, 0.42, 0.51] });
+  textSpaced(ctx, 'Description', MARGIN, y, { size: 6.2, gap: 1.8 });
+  textSpaced(ctx, 'Amount', 0, y, { size: 6.2, gap: 1.8, align: 'right', rightX });
   ctx.page.drawLine({
     start: { x: MARGIN, y: y - 6 }, end: { x: rightX, y: y - 6 },
-    thickness: 0.75, color: ctx.rgb(0.85, 0.87, 0.9),
+    thickness: 0.75, color: ctx.rgb(0.906, 0.922, 0.945),
   });
   ctx.y = y - 20;
 }
@@ -171,7 +186,7 @@ function drawItemRow(ctx, item, sym, unicodeOK) {
   const rightX = ctx.pageW - MARGIN;
   text(ctx, item.cat, MARGIN, y, { size: 9.5, maxWidth: ctx.pageW - MARGIN * 2 - 100 });
   const amt = money(sym, item.amt, unicodeOK);
-  text(ctx, amt, rightX - ctx.font.widthOfTextAtSize(amt, 9.5), y, { size: 9.5 });
+  text(ctx, amt, rightX - ctx.monoFont.widthOfTextAtSize(amt, 9.5), y, { font: ctx.monoFont, size: 9.5 });
   ctx.y = y - ROW_H;
 }
 
@@ -181,13 +196,14 @@ function drawTotals(ctx, t, sym, unicodeOK) {
     ensureSpace(ctx, opts.grand ? 26 : LINE_H + 5);
     const y = ctx.y;
     const size = opts.grand ? 11.5 : 9.5;
-    const font = opts.grand ? ctx.boldFont : ctx.font;
+    const labelFont = opts.grand ? ctx.boldFont : ctx.font;
+    const valueFont = opts.grand ? ctx.monoBoldFont : ctx.monoFont;
     const color = opts.grand ? ctx.primaryColor : [0.106, 0.141, 0.188];
     if (opts.grand) {
       ctx.page.drawLine({ start: { x: rightX - 200, y: y + 12 }, end: { x: rightX, y: y + 12 }, thickness: 1, color: ctx.primaryRGB });
     }
-    text(ctx, label, rightX - 200, y, { font, size, color: opts.grand ? [0.106, 0.141, 0.188] : [0.36, 0.42, 0.51] });
-    text(ctx, value, rightX - font.widthOfTextAtSize(value, size), y, { font, size, color });
+    text(ctx, label, rightX - 200, y, { font: labelFont, size, color: opts.grand ? [0.106, 0.141, 0.188] : [0.36, 0.42, 0.51] });
+    text(ctx, value, rightX - valueFont.widthOfTextAtSize(value, size), y, { font: valueFont, size, color });
     ctx.y = y - (opts.grand ? 20 : LINE_H + 5);
   };
   ctx.page.drawLine({ start: { x: MARGIN, y: ctx.y + 8 }, end: { x: ctx.pageW - MARGIN, y: ctx.y + 8 }, thickness: 0.75, color: ctx.rgb(0.85, 0.87, 0.9) });
@@ -268,14 +284,111 @@ async function embedFonts(ctx) {
     ctx.boldFont = await ctx.pdfDoc.embedFont(StandardFonts.HelveticaBold);
     ctx.unicodeOK = false;
   }
+  // Amounts use a monospace font in the preview (ui-monospace/SF Mono/Cascadia
+  // Code) so digits line up in a column — Courier is the closest always-available
+  // built-in equivalent, independent of whether the Unicode text font above loaded.
+  ctx.monoFont = await ctx.pdfDoc.embedFont(StandardFonts.Courier);
+  ctx.monoBoldFont = await ctx.pdfDoc.embedFont(StandardFonts.CourierBold);
 }
 
-function currentPrimaryColor() {
-  const css = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+function cssColor(varName, fallbackHex) {
+  const css = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
   const m = /^#([0-9a-f]{6})$/i.exec(css);
-  if (!m) return [0.118, 0.31, 0.639]; // BuildingBill default blue
-  const hex = m[1];
+  const hex = m ? m[1] : fallbackHex;
   return [parseInt(hex.slice(0, 2), 16) / 255, parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255];
+}
+
+// Mirrors the exact palette + mapping in styles.css (.status-pill.*) so the PDF
+// badge always matches whatever theme/accent the person has selected on screen.
+const STATUS_LABELS = { draft: 'Draft', sent: 'Sent', due: 'Due', paid: 'Paid', overdue: 'Overdue' };
+function statusPalette() {
+  return {
+    draft: { bg: cssColor('--panel2', 'F1F4F8'), fg: cssColor('--text-dim', '5B6B82') },
+    due: { bg: cssColor('--due-bg', 'E4F1FA'), fg: cssColor('--due', '1D6FA5') },
+    sent: { bg: cssColor('--warn-bg', 'FBF0DF'), fg: cssColor('--warn', 'C97A16') },
+    paid: { bg: cssColor('--success-bg', 'E7F5EC'), fg: cssColor('--success', '1E8E5A') },
+    overdue: { bg: cssColor('--danger-bg', 'FBEAE9'), fg: cssColor('--danger', 'C13B36') },
+  };
+}
+
+function dataUrlToBytes(dataUrl) {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/* Draws a short label the way the preview draws section headers ("BILLED TO",
+   "BILLING PERIOD", table column heads): uppercase + hand-spaced letters,
+   since pdf-lib has no letter-spacing property to lean on. */
+function textSpaced(ctx, str, x, y, opts = {}) {
+  const { font = ctx.boldFont, size = 6.8, color = [0.608, 0.647, 0.722], gap = 1.6, align = 'left', rightX } = opts;
+  const s = String(str || '').toUpperCase();
+  const totalW = [...s].reduce((w, ch) => w + font.widthOfTextAtSize(ch, size) + gap, 0) - gap;
+  let cx = align === 'right' ? rightX - totalW : x;
+  [...s].forEach((ch) => {
+    ctx.page.drawText(ch, { x: cx, y, size, font, color: ctx.rgb(color[0], color[1], color[2]) });
+    cx += font.widthOfTextAtSize(ch, size) + gap;
+  });
+  return totalW;
+}
+
+/* Simulates the preview's linear-gradient top bar (pdf-lib can't fill a real
+   CSS-style gradient, so this paints ~48 thin adjacent strips interpolating
+   between the two colors — visually identical at print/screen resolution). */
+function drawGradientBar(ctx, colorA, colorB) {
+  const steps = 48;
+  const barH = 4.5; // 0.375rem
+  const stripW = ctx.pageW / steps;
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1);
+    const r = colorA[0] + (colorB[0] - colorA[0]) * t;
+    const g = colorA[1] + (colorB[1] - colorA[1]) * t;
+    const b = colorA[2] + (colorB[2] - colorA[2]) * t;
+    ctx.page.drawRectangle({ x: i * stripW, y: ctx.pageH - barH, width: stripW + 0.5, height: barH, color: ctx.rgb(r, g, b) });
+  }
+}
+
+/* Draws the uploaded logo (if any) scaled into a fixed box, or the same
+   gradient placeholder square the preview shows when there's no logo yet.
+   Returns the box width so the caller knows where brand text should start. */
+async function drawLogo(ctx, data, x, topY) {
+  const boxH = 33; // 2.75rem fallback-square height, also used as the max height for real logos
+  if (data.logoDataUrl) {
+    try {
+      const bytes = dataUrlToBytes(data.logoDataUrl);
+      const png = await ctx.pdfDoc.embedPng(bytes);
+      const maxW = 100, maxH = boxH;
+      const scale = Math.min(maxW / png.width, maxH / png.height, 1) || Math.min(maxW / png.width, maxH / png.height);
+      const w = png.width * scale, h = png.height * scale;
+      ctx.page.drawImage(png, { x, y: topY - boxH + (boxH - h) / 2, width: w, height: h });
+      return w + 12;
+    } catch (e) { /* corrupt/unsupported logo data — fall through to the placeholder */ }
+  }
+  const steps = 10;
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1);
+    const c1 = ctx.primaryLightColor, c2 = ctx.primaryColor;
+    const r = c1[0] + (c2[0] - c1[0]) * t, g = c1[1] + (c2[1] - c1[1]) * t, b = c1[2] + (c2[2] - c1[2]) * t;
+    ctx.page.drawRectangle({ x: x + (i * boxH) / steps, y: topY - boxH, width: boxH / steps + 0.5, height: boxH, color: ctx.rgb(r, g, b) });
+  }
+  return boxH + 12;
+}
+
+function measureStatusPill(ctx, status) {
+  const label = STATUS_LABELS[status] || 'Draft';
+  const size = 6.5;
+  const textW = [...label.toUpperCase()].reduce((w, ch) => w + ctx.boldFont.widthOfTextAtSize(ch, size) + 1.4, 0);
+  const padX = 7;
+  return { w: textW + padX * 2, h: 13, padX, size };
+}
+function drawStatusPill(ctx, status, x, topY, dims) {
+  const label = STATUS_LABELS[status] || 'Draft';
+  const { bg, fg } = statusPalette()[status] || statusPalette().draft;
+  const { w, h, padX, size } = dims;
+  ctx.page.drawRectangle({ x, y: topY - h, width: w, height: h, color: ctx.rgb(bg[0], bg[1], bg[2]) });
+  textSpaced(ctx, label, x + padX, topY - h + 4, { font: ctx.boldFont, size, color: fg, gap: 1.4 });
 }
 
 /* ---------- entry point ---------- */
@@ -290,11 +403,14 @@ export async function generateInvoicePDF() {
   pdfDoc.setTitle(`${data.docType} ${data.invNumber || ''}`.trim());
   pdfDoc.setProducer('BuildingBill');
 
-  const primary = currentPrimaryColor();
+  const primary = cssColor('--primary', '1E4FA3');
+  const primaryLight = cssColor('--primary-light', '4472C4');
+  const accent = cssColor('--accent', '0EA5A0');
   const ctx = {
     pdfDoc, rgb, pageW, pageH, data,
     pageIndex: 0, pages: [],
     primaryColor: primary, primaryRGB: rgb(primary[0], primary[1], primary[2]),
+    primaryLightColor: primaryLight, accentColor: accent,
   };
   await embedFonts(ctx);
 
@@ -303,7 +419,7 @@ export async function generateInvoicePDF() {
     : document.getElementById('invCurrency').value;
 
   newPage(ctx);
-  drawHeader(ctx, data);
+  await drawHeader(ctx, data);
   drawParties(ctx, data);
   drawTableHeader(ctx);
   data.items.forEach((item) => {
