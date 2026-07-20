@@ -141,36 +141,11 @@ function canPrint() {
   return true;
 }
 
-export async function printInvoice() {
-  // Open the tab synchronously, in the same tick as the tap/click — this keeps it tied to
-  // the user gesture so mobile browsers don't block it as a pop-up. We fill it in below,
-  // once the PDF bytes are ready (that part has to be async).
-  const printWin = window.open('', '_blank');
-  closeMobileMenu();
-  saveToHistory();
-  try {
-    const pdfBytes = await generateInvoicePDF();
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    if (printWin) {
-      printWin.location.href = url;
-      showToast('Invoice opened in a new tab', 'Tap the Print icon in the PDF viewer that just opened — it prints exactly what you see, with no extra browser settings to adjust.');
-    } else {
-      // Pop-up blocked — fall back to a normal download so the person still gets the file.
-      const a = document.createElement('a');
-      a.href = url; a.download = (val('invNumber') || 'invoice') + '.pdf';
-      document.body.appendChild(a); a.click(); a.remove();
-      showToast('Pop-up blocked — downloaded instead', 'Open the PDF, then use its own Print button.');
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (e) {
-    console.error('PDF generation failed, falling back to browser Print:', e);
-    if (printWin) printWin.close();
-    if (!canPrint()) return;
-    preparePrintLayout();
-    window.print();
-    showToast('Opening print dialog instead', 'Tick "Background graphics" and untick "Headers and footers" if your browser shows those options. (PDF generation hit a snag — see console for details.)');
-  }
+export function printInvoice() {
+  if (!canPrint()) return;
+  preparePrintLayout();
+  window.print();
+  showToast('Opening print dialog', 'Select your printer and print the invoice.');
 }
 
 export async function downloadPDF() {
