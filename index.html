@@ -165,7 +165,10 @@
           <tbody id="lineItemBody"></tbody>
         </table>
       </div>
-      <div class="add-item-btn" onclick="addLineItem()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add charge line</div>
+      <div class="line-items-actions">
+        <div class="add-item-btn" onclick="addLineItem()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add charge line</div>
+        <div class="clear-item-btn" onclick="clearAllLineItems()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>Clear all</div>
+      </div>
 
       <div class="summary-block">
         <div class="field-row" style="margin-bottom:0.625rem;">
@@ -273,7 +276,7 @@
       </div>
       <div class="action-row">
         <button class="action-btn" onclick="printInvoice()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-2M6 14h12v7H6z"/></svg>Print</button>
-        <button class="action-btn primary" onclick="downloadPDF()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16"/></svg>Download as PDF</button>
+        <button class="action-btn primary" onclick="downloadPDF()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 19h16"/></svg>Download PDF</button>
         <button class="action-btn" onclick="sendEmail()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Send via email</button>
       </div>
     </div>

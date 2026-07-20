@@ -127,6 +127,10 @@ a{color:inherit;}
 .li-remove:hover{color:var(--danger);}
 .add-item-btn{display:flex;align-items:center;gap:0.375rem;font-size:0.7812rem;color:var(--primary);cursor:pointer;margin-top:0.75rem;font-weight:700;}
 .add-item-btn svg{width:0.875rem;height:0.875rem;}
+.line-items-actions{display:flex;align-items:center;justify-content:space-between;gap:0.75rem;}
+.clear-item-btn{display:flex;align-items:center;gap:0.375rem;font-size:0.7812rem;color:var(--text-faint);cursor:pointer;margin-top:0.75rem;font-weight:700;}
+.clear-item-btn svg{width:0.875rem;height:0.875rem;}
+.clear-item-btn:hover{color:var(--danger);}
 
 .summary-block{margin-top:1rem;padding-top:0.875rem;border-top:0.0625rem dashed var(--line);}
 .summary-row{display:flex;justify-content:space-between;font-size:0.7812rem;padding:0.3125rem 0;color:var(--text-dim);}
@@ -240,7 +244,15 @@ a{color:inherit;}
   .wrap{display:block !important;max-width:none !important;padding:0 !important;margin:0 !important;grid-template-columns:none !important;}
   .preview-col{display:block !important;position:static !important;}
   #pane-paper{display:block !important;}
-  .invoice-paper{box-shadow:none !important;border:none !important;border-radius:0 !important;margin:0 !important;padding:12mm;break-inside:avoid;page-break-inside:avoid;}
+  .invoice-paper{box-shadow:none !important;border:none !important;border-radius:0 !important;margin:0 !important;padding:12.7mm;}
+  /* Repeat the "Description / Amount" header on every printed page once the
+     charges list overflows past one page — this only works if the table (and
+     its thead) is actually allowed to break across pages, which is why
+     .invoice-paper above no longer forces break-inside:avoid on itself. */
+  .paper-table{break-inside:auto;}
+  .paper-table thead{display:table-header-group;}
+  .paper-table tbody{display:table-row-group;}
+  .paper-table tr{break-inside:avoid;page-break-inside:avoid;}
 }
 .mobile-share-bar{display:none !important;} /* superseded by the contextual fixed action bars below */
 

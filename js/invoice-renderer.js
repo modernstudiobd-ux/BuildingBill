@@ -4,7 +4,7 @@
    text, the QR code, and the charge-line-items table (used by both the
    editable form and the printable preview).
    ========================================================================== */
-import { state, val, fmt, escapeHtml, escapeAttr, formatDate, chargeCategories } from './state.js';
+import { state, val, fmt, escapeHtml, escapeAttr, formatDate, chargeCategories, showToast } from './state.js';
 import { paymentSummary } from './components/sidebar-form.js';
 import { saveDraft } from './components/history-modal.js';
 
@@ -36,6 +36,16 @@ export function removeLineItem(idx) {
   if (state.lineItems.length === 1) { state.lineItems[idx] = { cat: 'Rent', amt: 0 }; }
   else { state.lineItems.splice(idx, 1); }
   renderLineItems(); sync();
+}
+export function clearAllLineItems() {
+  const count = state.lineItems.length;
+  const hasContent = state.lineItems.some(i => (i.cat && i.cat !== 'Rent') || i.amt);
+  if (!hasContent) return; // nothing to clear
+  if (!confirm(`Remove all ${count} charge line${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
+  state.lineItems = [{ cat: 'Rent', amt: 0 }];
+  renderLineItems();
+  sync();
+  showToast('Charges cleared', 'Started fresh with one blank charge line.');
 }
 export function updateItem(idx, field, value) {
   if (field === 'amt') { state.lineItems[idx].amt = parseFloat(value.replace(/[^\d.-]/g, '')) || 0; sync(); return; }
@@ -277,6 +287,7 @@ export function regenerateText() {
 // (including markup generated dynamically by renderLineItems above).
 window.addLineItem = addLineItem;
 window.removeLineItem = removeLineItem;
+window.clearAllLineItems = clearAllLineItems;
 window.updateItem = updateItem;
 window.setDiscountMode = setDiscountMode;
 window.sync = sync;

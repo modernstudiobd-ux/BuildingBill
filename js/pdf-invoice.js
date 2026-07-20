@@ -74,7 +74,7 @@ function buildInvoiceData() {
 }
 
 /* ---------- layout constants ---------- */
-const MARGIN = 44;
+const MARGIN = 36; // 0.5in — a safe, standard margin that reads well on both A4 and US Letter/Legal
 const ROW_H = 20;
 const LINE_H = 13;
 
