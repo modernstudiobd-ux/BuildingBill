@@ -103,14 +103,23 @@ export function downloadTXT() {
 }
 
 /* ---------- print / PDF ---------- */
-// IMPORTANT: this must stay 100% synchronous. Mobile Safari/Chrome only apply
-// the @media print stylesheet if window.print() is called in the very same
-// tick as the user's tap — any await/setTimeout/rAF delay before it breaks that
-// link, and the browser falls back to printing a raw screenshot of whatever is
-// currently on screen (the whole app, hamburger menu and all). So every DOM
-// change below is synchronous, and print() fires immediately after — the
-// browser recalculates styles before rendering the print output regardless.
-function preparePrintLayout() {
+// Chrome has a well-known bug where calling window.print() in the very same tick as a
+// DOM/class change can print a blank page — it hasn't finished repainting the new print
+// layout yet. Waiting one real paint cycle (two nested requestAnimationFrame calls) before
+// printing fixes that, and still fires close enough to the original tap/click for mobile
+// Safari/Chrome to treat it as part of the same user action (so the print dialog still opens
+// there too).
+function waitForPaint() {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+async function preparePrintLayout() {
+  // Self-heal: if a previous print attempt left the page stuck in "printing" mode (this can
+  // happen with virtual PDF printers like Microsoft Print to PDF, which don't always fire the
+  // browser's 'afterprint' event reliably), clear it before starting a new attempt instead of
+  // stacking on top of broken state.
+  document.body.classList.remove('printing');
   switchTab('paper');
   // Safety net: if the user is still on the mobile "Form" tab when Print/Download
   // is triggered, force the Preview tab so the invoice column is guaranteed to be
@@ -120,11 +129,11 @@ function preparePrintLayout() {
   closeMobileMenu();
   document.body.classList.add('printing');
   saveToHistory();
-  // Force the browser to apply the class changes above right now (synchronously),
-  // instead of leaving them queued for its next natural repaint. Reading a layout
-  // property forces this "reflow" — cheap, and cross-browser (Chrome/Firefox/
-  // Safari/Edge/Samsung Internet all honour it the same way.
-  void document.body.offsetHeight;
+  await waitForPaint();
+}
+
+function endPrintingState() {
+  document.body.classList.remove('printing');
 }
 
 function canPrint() {
@@ -141,11 +150,12 @@ function canPrint() {
   return true;
 }
 
-export function printInvoice() {
+export async function printInvoice() {
   if (!canPrint()) return;
-  preparePrintLayout();
+  await preparePrintLayout();
   window.print();
   showToast('Opening print dialog', 'Select your printer and print the invoice.');
+  setTimeout(endPrintingState, 3000); // safety net in case 'afterprint' doesn't fire
 }
 
 export async function downloadPDF() {
@@ -165,15 +175,16 @@ export async function downloadPDF() {
   } catch (e) {
     console.error('PDF generation failed, falling back to Print > Save as PDF:', e);
     if (!canPrint()) return;
-    preparePrintLayout();
+    await preparePrintLayout();
     window.print();
     showToast('Opening print dialog instead', 'Choose "Save as PDF" as the destination. (The one-tap PDF download hit a snag — see console for details.)');
+    setTimeout(endPrintingState, 3000);
   }
 }
 
 /* ---------- wire up listeners that aren't inline onclick/onchange in the HTML ---------- */
 export function initPreview() {
-  window.addEventListener('afterprint', () => document.body.classList.remove('printing'));
+  window.addEventListener('afterprint', endPrintingState);
   document.getElementById('msgText').addEventListener('input', () => { state.textManuallyEdited = true; });
 }
 
